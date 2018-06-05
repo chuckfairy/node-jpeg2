@@ -29,6 +29,7 @@ typedef enum { BUF_RGB, BUF_BGR, BUF_RGBA, BUF_BGRA } buffer_type;
 
 struct encode_request {
     v8::Persistent<v8::Function> callback;
+    v8::Isolate * isolate;
     void *jpeg_obj;
     char *jpeg;
     int jpeg_len;

@@ -163,18 +163,26 @@ void Jpeg::SetSmoothing(const FunctionCallbackInfo<Value>& args)
     Isolate* isolate = args.GetIsolate();
 
     if (args.Length() != 1) {
-        return VException("One argument required - quality");
+        VException("One argument required - quality");
+        return;
     }
 
-    //if (!args[0]->IsInt32())
-    //return VException("First argument must be integer quality");
+    if (!args[0]->IsInt32()) {
+        VException("First argument must be integer quality");
+        return;
+    }
 
     int s = args[0]->NumberValue();
 
-    if (s < 0)
-        return VException("Smoothing must be greater or equal to 0.");
-    if (s > 100)
-        return VException("Smoothing must be less than or equal to 100.");
+    if (s < 0) {
+        VException("Smoothing must be greater or equal to 0.");
+        return;
+    }
+
+    if (s > 100) {
+        VException("Smoothing must be less than or equal to 100.");
+        return;
+    }
 
     Jpeg *jpeg = node::ObjectWrap::Unwrap<Jpeg>(args.This());
     jpeg->SetSmoothing(s);
@@ -211,23 +219,26 @@ void Jpeg::UV_JpegEncodeAfter(uv_work_t *req) {
     Handle<Value> argv[2];
 
     if (enc_req->error) {
-        argv[0] = NULL;
-        argv[1] = ErrorException(enc_req->error);
+        //argv[0] = 0;
+        //argv[1] = ErrorException(enc_req->error);
     } else {
-        v8::MaybeLocal<v8::Object> *buf = Buffer::New(enc_req->jpeg_len);
-        memcpy(Buffer::Data(buf), enc_req->jpeg, enc_req->jpeg_len);
-        argv[0] = buf->handle_;
-        argv[1] = NULL;
+        v8::MaybeLocal<v8::Object> bufMaybe = Buffer::New(enc_req->isolate, enc_req->jpeg_len);
+        v8::Local<v8::Object> * buf;
+        bufMaybe.ToLocal<v8::Object>( buf );
+        memcpy(Buffer::Data(*buf), enc_req->jpeg, enc_req->jpeg_len);
+        argv[0] = *buf;
+        //argv[1] = 0;
     }
 
-    TryCatch try_catch; // don't quite see the necessity of this
+    TryCatch try_catch( enc_req->isolate ); // don't quite see the necessity of this
 
-    enc_req->callback->Call(Context::GetCurrent()->Global(), 2, argv);
+    enc_req->callback.Call(Context::GetCurrent()->Global(), 2, argv);
 
-    if (try_catch.HasCaught())
-        FatalException(try_catch);
+    if (try_catch.HasCaught()) {
+        FatalException( enc_req->isolate, try_catch );
+    }
 
-    enc_req->callback.Dispose();
+    //enc_req->callback.Dispose();
     free(enc_req->jpeg);
     free(enc_req->error);
 
@@ -239,27 +250,38 @@ void Jpeg::JpegEncodeAsync(const FunctionCallbackInfo<Value>& args) {
 
     Isolate* isolate = args.GetIsolate();
 
-    if (args.Length() != 1)
-        return VException("One argument required - callback function.");
+    if (args.Length() != 1) {
+        VException("One argument required - callback function.");
+        return;
+    }
 
-    if (!args[0]->IsFunction())
-        return VException("First argument must be a function.");
+    if (!args[0]->IsFunction()) {
+        VException("First argument must be a function.");
+        return;
+    }
 
     Local<Function> callback = Local<Function>::Cast(args[0]);
     Jpeg *jpeg = ObjectWrap::Unwrap<Jpeg>(args.This());
 
-    encode_request *enc_req = (encode_request *)malloc(sizeof(*enc_req));
-    if (!enc_req)
-        return VException("malloc in Jpeg::JpegEncodeAsync failed.");
+    encode_request  *enc_req = (encode_request *)malloc(sizeof(*enc_req));
+
+    if( ! enc_req ) {
+
+        VException("malloc in Jpeg::JpegEncodeAsync failed.");
+        return;
+
+    }
 
     enc_req->callback = Persistent<Function>::New(callback);
     enc_req->jpeg_obj = jpeg;
+    enc_req->isolate = isolate;
     enc_req->jpeg = NULL;
     enc_req->jpeg_len = 0;
     enc_req->error = NULL;
 
     uv_work_t* req = new uv_work_t;
     req->data = enc_req;
+
     uv_queue_work(uv_default_loop(), req, UV_JpegEncode, (uv_after_work_cb)UV_JpegEncodeAfter);
 
     jpeg->Ref();
