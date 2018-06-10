@@ -4,8 +4,11 @@
 #include <node.h>
 #include <cstring>
 
-void ErrorException(const char *msg);
-void VException(const char *msg);
+using v8::Exception;
+using v8::Isolate;
+
+v8::Handle<v8::Value> ErrorException(Isolate *, const char *msg);
+v8::Handle<v8::Value> VException(Isolate *, const char *msg);
 
 struct Point {
     int x, y;
@@ -28,7 +31,7 @@ unsigned char *bgr_to_rgb(const unsigned char *rgb, int rgb_size);
 typedef enum { BUF_RGB, BUF_BGR, BUF_RGBA, BUF_BGRA } buffer_type;
 
 struct encode_request {
-    v8::Persistent<v8::Function> callback;
+    v8::Local<v8::Function> callback;
     v8::Isolate * isolate;
     void *jpeg_obj;
     char *jpeg;

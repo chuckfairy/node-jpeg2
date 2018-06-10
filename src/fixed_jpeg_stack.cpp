@@ -12,9 +12,8 @@
 using namespace v8;
 using namespace node;
 
-void
-FixedJpegStack::Initialize(v8::Handle<v8::Object> target)
-{
+void FixedJpegStack::Initialize(v8::Handle<v8::Object> target) {
+
     HandleScope scope;
 
     Local<FunctionTemplate> t = FunctionTemplate::New(New);
@@ -24,6 +23,7 @@ FixedJpegStack::Initialize(v8::Handle<v8::Object> target)
     NODE_SET_PROTOTYPE_METHOD(t, "push", Push);
     NODE_SET_PROTOTYPE_METHOD(t, "setQuality", SetQuality);
     target->Set(String::NewSymbol("FixedJpegStack"), t->GetFunction());
+
 }
 
 FixedJpegStack::FixedJpegStack(int wwidth, int hheight, buffer_type bbuf_type) :
@@ -33,9 +33,8 @@ FixedJpegStack::FixedJpegStack(int wwidth, int hheight, buffer_type bbuf_type) :
     if (!data) throw "calloc in FixedJpegStack::FixedJpegStack failed!";
 }
 
-Handle<Value>
-FixedJpegStack::JpegEncodeSync()
-{
+void FixedJpegStack::JpegEncodeSync() {
+
     HandleScope scope;
 
     try {
@@ -44,7 +43,7 @@ FixedJpegStack::JpegEncodeSync()
         int jpeg_len = jpeg_encoder.get_jpeg_len();
         Buffer *retbuf = Buffer::New(jpeg_len);
         memcpy(Buffer::Data(retbuf), jpeg_encoder.get_jpeg(), jpeg_len);
-        return scope.Close(retbuf->handle_); 
+        return scope.Close(retbuf->handle_);
     }
     catch (const char *err) {
         return VException(err);
@@ -110,89 +109,120 @@ FixedJpegStack::Push(unsigned char *data_buf, int x, int y, int w, int h)
 }
 
 
-void
-FixedJpegStack::SetQuality(int q)
-{
+void FixedJpegStack::SetQuality(int q) {
+
     quality = q;
+
 }
 
-Handle<Value>
-FixedJpegStack::New(const Arguments &args)
-{
-    HandleScope scope;
+void FixedJpegStack::New(const Arguments &args) {
 
-    if (args.Length() < 2)
-        return VException("At least two arguments required - width, height, [and buffer type]");
-    if (!args[0]->IsInt32())
-        return VException("First argument must be integer width.");
-    if (!args[1]->IsInt32())
-        return VException("Second argument must be integer height.");
+    Isolate* isolate = args.GetIsolate();
+
+    if (args.Length() < 2) {
+        VException( isolate, "At least two arguments required - width, height, [and buffer type]" );
+        return;
+    }
+
+    if (!args[0]->IsInt32()) {
+        VException( isolate, "First argument must be integer width." );
+        return;
+    }
+
+    if (!args[1]->IsInt32()) {
+        VException( isolate, "Second argument must be integer height." );
+        return;
+    }
 
     int w = args[0]->Int32Value();
     int h = args[1]->Int32Value();
 
-    if (w < 0)
-        return VException("Width can't be negative.");
-    if (h < 0)
-        return VException("Height can't be negative.");
+    if (w < 0) {
+        VException( isolate, "Width can't be negative." );
+        return;
+    }
+
+    if (h < 0) {
+        VException( isolate, "Height can't be negative." );
+        return;
+    }
 
     buffer_type buf_type = BUF_RGB;
     if (args.Length() == 3) {
-        if (!args[2]->IsString())
-            return VException("Third argument must be a string. Either 'rgb', 'bgr', 'rgba' or 'bgra'.");
+        if (!args[2]->IsString()) {
+            VException( isolate, "Third argument must be a string. Either 'rgb', 'bgr', 'rgba' or 'bgra'." );
+            return;
+        }
 
         String::AsciiValue bt(args[2]->ToString());
         if (!(str_eq(*bt, "rgb") || str_eq(*bt, "bgr") ||
             str_eq(*bt, "rgba") || str_eq(*bt, "bgra")))
         {
-            return VException("Buffer type must be 'rgb', 'bgr', 'rgba' or 'bgra'.");
+            VException( isolate, "Buffer type must be 'rgb', 'bgr', 'rgba' or 'bgra'.");
+            return;
         }
 
-        if (str_eq(*bt, "rgb"))
+        if (str_eq(*bt, "rgb")) {
             buf_type = BUF_RGB;
-        else if (str_eq(*bt, "bgr"))
+        } else if (str_eq(*bt, "bgr")) {
             buf_type = BUF_BGR;
-        else if (str_eq(*bt, "rgba"))
+        } else if (str_eq(*bt, "rgba")) {
             buf_type = BUF_RGBA;
-        else if (str_eq(*bt, "bgra"))
+        } else if (str_eq(*bt, "bgra")) {
             buf_type = BUF_BGRA;
-        else 
-            return VException("Buffer type wasn't 'rgb', 'bgr', 'rgba' or 'bgra'.");
+        } else {
+            VException( isolate, "Buffer type wasn't 'rgb', 'bgr', 'rgba' or 'bgra'.");
+            return;
+        }
     }
 
     try {
-        FixedJpegStack *jpeg = new FixedJpegStack(w, h, buf_type);
+        FixedJpegStack *jpeg = new FixedJpegStack( w, h, buf_type );
         jpeg->Wrap(args.This());
-        return args.This();
+        args.This();
     }
     catch (const char *err) {
-        return VException(err);
+        VException( isolate, err );
+        return;
     }
+
 }
 
-Handle<Value>
-FixedJpegStack::JpegEncodeSync(const Arguments &args)
-{
-    HandleScope scope;
+void FixedJpegStack::JpegEncodeSync(const Arguments &args) {
+
     FixedJpegStack *jpeg = ObjectWrap::Unwrap<FixedJpegStack>(args.This());
-    return scope.Close(jpeg->JpegEncodeSync());
+    jpeg->JpegEncodeSync();
+
 }
 
-Handle<Value>
-FixedJpegStack::Push(const Arguments &args)
-{
-    HandleScope scope;
+void FixedJpegStack::Push(const Arguments &args) {
 
-    if (!Buffer::HasInstance(args[0]))
-        return VException("First argument must be Buffer.");
-    if (!args[1]->IsInt32())
-        return VException("Second argument must be integer x.");
-    if (!args[2]->IsInt32())
-        return VException("Third argument must be integer y.");
-    if (!args[3]->IsInt32())
-        return VException("Fourth argument must be integer w.");
-    if (!args[4]->IsInt32())
-        return VException("Fifth argument must be integer h.");
+    Isolate* isolate = args.GetIsolate();
+
+    if (!Buffer::HasInstance(args[0])) {
+        VException(isolate, "First argument must be Buffer.");
+        return;
+    }
+
+    if (!args[1]->IsInt32()) {
+        VException(isolate, "Second argument must be integer x.");
+        return;
+    }
+
+    if (!args[2]->IsInt32()) {
+        VException(isolate, "Third argument must be integer y.");
+        return;
+    }
+
+    if (!args[3]->IsInt32()) {
+        VException(isolate, "Fourth argument must be integer w.");
+        return;
+    }
+
+    if (!args[4]->IsInt32()) {
+        VException(isolate, "Fifth argument must be integer h.");
+        return;
+    }
 
     FixedJpegStack *jpeg = ObjectWrap::Unwrap<FixedJpegStack>(args.This());
     Local<Object> data_buf = args[0]->ToObject();
@@ -201,55 +231,83 @@ FixedJpegStack::Push(const Arguments &args)
     int w = args[3]->Int32Value();
     int h = args[4]->Int32Value();
 
-    if (x < 0)
-        return VException("Coordinate x smaller than 0.");
-    if (y < 0)
-        return VException("Coordinate y smaller than 0.");
-    if (w < 0)
-        return VException("Width smaller than 0.");
-    if (h < 0)
-        return VException("Height smaller than 0.");
-    if (x >= jpeg->width) 
-        return VException("Coordinate x exceeds FixedJpegStack's dimensions.");
-    if (y >= jpeg->height) 
-        return VException("Coordinate y exceeds FixedJpegStack's dimensions.");
-    if (x+w > jpeg->width) 
-        return VException("Pushed fragment exceeds FixedJpegStack's width.");
-    if (y+h > jpeg->height) 
-        return VException("Pushed fragment exceeds FixedJpegStack's height.");
+    if (x < 0) {
+        VException(isolate, "Coordinate x smaller than 0.");
+        return;
+    }
+
+    if (y < 0) {
+        VException(isolate, "Coordinate y smaller than 0.");
+        return;
+    }
+
+    if (w < 0) {
+        VException(isolate, "Width smaller than 0.");
+        return;
+    }
+
+    if (h < 0) {
+        VException(isolate, "Height smaller than 0.");
+        return;
+    }
+
+    if (x >= jpeg->width) {
+        VException(isolate, "Coordinate x exceeds FixedJpegStack's dimensions.");
+    }
+
+    if (y >= jpeg->height) {
+        VException(isolate, "Coordinate y exceeds FixedJpegStack's dimensions.");
+        return;
+    }
+
+    if (x+w > jpeg->width) {
+        VException(isolate, "Pushed fragment exceeds FixedJpegStack's width.");
+        return;
+    }
+
+    if (y+h > jpeg->height) {
+        VException("Pushed fragment exceeds FixedJpegStack's height.");
+        return;
+    }
 
     jpeg->Push((unsigned char *)Buffer::Data(data_buf), x, y, w, h);
 
-    return Undefined();
+    Undefined( isolate );
 }
 
-Handle<Value>
-FixedJpegStack::SetQuality(const Arguments &args)
-{
-    HandleScope scope;
+void FixedJpegStack::SetQuality(const Arguments &args) {
 
-    if (args.Length() != 1)
-        return VException("One argument required - quality");
+    Isolate* isolate = args.GetIsolate();
 
-    if (!args[0]->IsInt32())
-        return VException("First argument must be integer quality");
+    if (args.Length() != 1) {
+        VException(isolate, "One argument required - quality");
+        return;
+    }
+
+    if (!args[0]->IsInt32()) {
+        VException(isolate, "First argument must be integer quality");
+        return;
+    }
 
     int q = args[0]->Int32Value();
 
-    if (q < 0) 
-        return VException("Quality must be greater or equal to 0.");
-    if (q > 100)
-        return VException("Quality must be less than or equal to 100.");
+    if (q < 0) {
+        VException(isolate, "Quality must be greater or equal to 0.");
+        return;
+    }
+    if (q > 100) {
+        VException(isolate, "Quality must be less than or equal to 100.");
+        return;
+    }
 
     FixedJpegStack *jpeg = ObjectWrap::Unwrap<FixedJpegStack>(args.This());
     jpeg->SetQuality(q);
 
-    return Undefined();
+    Undefined(isolate);
 }
 
-void
-FixedJpegStack::UV_JpegEncode(uv_work_t *req)
-{
+void FixedJpegStack::UV_JpegEncode(uv_work_t *req) {
+
     encode_request *enc_req = (encode_request *)req->data;
     FixedJpegStack *jpeg = (FixedJpegStack *)enc_req->jpeg_obj;
 
@@ -271,10 +329,7 @@ FixedJpegStack::UV_JpegEncode(uv_work_t *req)
     }
 }
 
-void 
-FixedJpegStack::UV_JpegEncodeAfter(uv_work_t *req)
-{
-    HandleScope scope;
+void FixedJpegStack::UV_JpegEncodeAfter(uv_work_t *req) {
 
     encode_request *enc_req = (encode_request *)req->data;
     delete req;
@@ -307,23 +362,29 @@ FixedJpegStack::UV_JpegEncodeAfter(uv_work_t *req)
     free(enc_req);
 }
 
-Handle<Value>
-FixedJpegStack::JpegEncodeAsync(const Arguments &args)
-{
-    HandleScope scope;
+void FixedJpegStack::JpegEncodeAsync(const Arguments &args) {
 
-    if (args.Length() != 1)
-        return VException("One argument required - callback function.");
+    Isolate* isolate = args.GetIsolate();
 
-    if (!args[0]->IsFunction())
-        return VException("First argument must be a function.");
+    if (args.Length() != 1) {
+        VException(isolate, "One argument required - callback function.");
+        return;
+    }
+
+    if (!args[0]->IsFunction()) {
+        VException(isolate, "First argument must be a function.");
+        return;
+    }
 
     Local<Function> callback = Local<Function>::Cast(args[0]);
     FixedJpegStack *jpeg = ObjectWrap::Unwrap<FixedJpegStack>(args.This());
 
     encode_request *enc_req = (encode_request *)malloc(sizeof(*enc_req));
-    if (!enc_req)
-        return VException("malloc in FixedJpegStack::JpegEncodeAsync failed.");
+
+    if (!enc_req) {
+        VException(isolate, "malloc in FixedJpegStack::JpegEncodeAsync failed.");
+        return;
+    }
 
     enc_req->callback = Persistent<Function>::New(callback);
     enc_req->jpeg_obj = jpeg;
@@ -336,6 +397,6 @@ FixedJpegStack::JpegEncodeAsync(const Arguments &args)
     uv_queue_work(uv_default_loop(), req, UV_JpegEncode, (uv_after_work_cb)UV_JpegEncodeAfter);
     jpeg->Ref();
 
-    return Undefined();
-}
+    Undefined( isolate );
 
+}

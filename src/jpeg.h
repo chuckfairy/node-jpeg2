@@ -13,6 +13,7 @@
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
+using v8::Isolate;
 using v8::Value;
 
 class Jpeg : public node::ObjectWrap {
@@ -23,7 +24,9 @@ class Jpeg : public node::ObjectWrap {
 public:
     static void Initialize(v8::Handle<v8::Object> target);
     Jpeg(unsigned char *ddata, int wwidth, int hheight, buffer_type bbuf_type);
-    void JpegEncodeSync();
+
+    void JpegEncodeSync( Isolate * );
+
     void SetQuality(int q);
     void SetSmoothing(int s);
 

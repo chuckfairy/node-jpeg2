@@ -445,20 +445,23 @@ DynamicJpegStack::UV_JpegEncodeAfter(uv_work_t *req)
 Handle<Value>
 DynamicJpegStack::JpegEncodeAsync(const Arguments &args)
 {
-    HandleScope scope;
 
-    if (args.Length() != 1)
+    if (args.Length() != 1) {
         return VException("One argument required - callback function.");
+    }
 
-    if (!args[0]->IsFunction())
+    if (!args[0]->IsFunction()) {
         return VException("First argument must be a function.");
+    }
 
     Local<Function> callback = Local<Function>::Cast(args[0]);
     DynamicJpegStack *jpeg = ObjectWrap::Unwrap<DynamicJpegStack>(args.This());
 
     encode_request *enc_req = (encode_request *)malloc(sizeof(*enc_req));
-    if (!enc_req)
+
+    if (!enc_req) {
         return VException("malloc in DynamicJpegStack::JpegEncodeAsync failed.");
+    }
 
     enc_req->callback = Persistent<Function>::New(callback);
     enc_req->jpeg_obj = jpeg;

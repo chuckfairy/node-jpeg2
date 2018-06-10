@@ -6,16 +6,22 @@
 using namespace std;
 using namespace v8;
 
-void ErrorException(const char *msg) {
-    //return Exception::Error(string(msg));
+using v8::Exception;
+
+Handle<Value> ErrorException(Isolate * isolate, const char *msg) {
+    return Exception::TypeError(
+        String::NewFromUtf8(isolate, msg)
+    );
 }
 
-void VException(const char *msg) {
-    //return ThrowException(ErrorException(msg));
+Handle<Value> VException(Isolate * isolate, const char *msg) {
+    isolate->ThrowException(
+        ErrorException( isolate, msg )
+    );
 }
 
 bool str_eq(const char *s1, const char *s2) {
-        return strcmp(s1, s2) == 0;
+    return strcmp(s1, s2) == 0;
 }
 
 unsigned char * rgba_to_rgb(const unsigned char *rgba, int rgba_size) {
@@ -52,9 +58,8 @@ unsigned char * bgra_to_rgb(const unsigned char *bgra, int bgra_size) {
     return rgb;
 }
 
-unsigned char *
-bgr_to_rgb(const unsigned char *bgr, int bgr_size)
-{
+unsigned char * bgr_to_rgb(const unsigned char *bgr, int bgr_size) {
+
     assert(bgr_size%3==0);
 
     unsigned char *rgb = (unsigned char *)malloc(sizeof(*rgb)*bgr_size);
