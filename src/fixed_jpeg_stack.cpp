@@ -14,45 +14,58 @@ using namespace node;
 
 void FixedJpegStack::Initialize(v8::Handle<v8::Object> target) {
 
-    HandleScope scope;
+    Isolate* isolate = target->GetIsolate();
 
-    Local<FunctionTemplate> t = FunctionTemplate::New(New);
-    t->InstanceTemplate()->SetInternalFieldCount(1);
-    NODE_SET_PROTOTYPE_METHOD(t, "encode", JpegEncodeAsync);
-    NODE_SET_PROTOTYPE_METHOD(t, "encodeSync", JpegEncodeSync);
-    NODE_SET_PROTOTYPE_METHOD(t, "push", Push);
-    NODE_SET_PROTOTYPE_METHOD(t, "setQuality", SetQuality);
-    target->Set(String::NewSymbol("FixedJpegStack"), t->GetFunction());
+    Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate, New);
+    tpl->SetClassName(String::NewFromUtf8(isolate, "Jpeg"));
+    tpl->InstanceTemplate()->SetInternalFieldCount(1);
+
+    NODE_SET_PROTOTYPE_METHOD(tpl, "encode", JpegEncodeAsync);
+    NODE_SET_PROTOTYPE_METHOD(tpl, "encodeSync", JpegEncodeSync);
+    NODE_SET_PROTOTYPE_METHOD(tpl, "setQuality", SetQuality);
+    NODE_SET_PROTOTYPE_METHOD(tpl, "push", Push);
+
+    target->Set(String::NewFromUtf8(isolate, "FixedJpegStack"), tpl->GetFunction());
 
 }
 
 FixedJpegStack::FixedJpegStack(int wwidth, int hheight, buffer_type bbuf_type) :
     width(wwidth), height(hheight), quality(60), buf_type(bbuf_type)
 {
+
     data = (unsigned char *)calloc(width*height*3, sizeof(*data));
     if (!data) throw "calloc in FixedJpegStack::FixedJpegStack failed!";
+
 }
 
-void FixedJpegStack::JpegEncodeSync() {
-
-    HandleScope scope;
+void FixedJpegStack::JpegEncodeSync( Isolate * isolate ) {
 
     try {
+
         JpegEncoder jpeg_encoder(data, width, height, quality, BUF_RGB);
         jpeg_encoder.encode();
+
+        //Buffer send
         int jpeg_len = jpeg_encoder.get_jpeg_len();
-        Buffer *retbuf = Buffer::New(jpeg_len);
-        memcpy(Buffer::Data(retbuf), jpeg_encoder.get_jpeg(), jpeg_len);
-        return scope.Close(retbuf->handle_);
+        v8::MaybeLocal<v8::Object> retbuf = Buffer::New(isolate, jpeg_len);
+        v8::Local<v8::Object> local;
+        retbuf.ToLocal( &local );
+        memcpy(
+            Buffer::Data(local),
+            jpeg_encoder.get_jpeg(),
+            jpeg_len
+        );
+
+        //return scope.Close(retbuf->handle_);
+
+    } catch (const char *err) {
+        VException( isolate, err );
     }
-    catch (const char *err) {
-        return VException(err);
-    }
+
 }
 
-void
-FixedJpegStack::Push(unsigned char *data_buf, int x, int y, int w, int h)
-{
+void FixedJpegStack::Push(unsigned char *data_buf, int x, int y, int w, int h) {
+
     int start = y*width*3 + x*3;
 
     switch (buf_type) {
@@ -106,6 +119,7 @@ FixedJpegStack::Push(unsigned char *data_buf, int x, int y, int w, int h)
     default:
         throw "Unexpected buf_type in FixedJpegStack::Push";
     }
+
 }
 
 
@@ -115,7 +129,7 @@ void FixedJpegStack::SetQuality(int q) {
 
 }
 
-void FixedJpegStack::New(const Arguments &args) {
+void FixedJpegStack::New(const FunctionCallbackInfo<Value>& args) {
 
     Isolate* isolate = args.GetIsolate();
 
@@ -154,26 +168,31 @@ void FixedJpegStack::New(const Arguments &args) {
             return;
         }
 
-        String::AsciiValue bt(args[2]->ToString());
-        if (!(str_eq(*bt, "rgb") || str_eq(*bt, "bgr") ||
-            str_eq(*bt, "rgba") || str_eq(*bt, "bgra")))
-        {
-            VException( isolate, "Buffer type must be 'rgb', 'bgr', 'rgba' or 'bgra'.");
+        String::Utf8Value str(args[3]);
+        const char * bt = * str;
+
+        if (!(str_eq(bt, "rgb")
+            || str_eq(bt, "bgr")
+            || str_eq(bt, "rgba")
+            || str_eq(bt, "bgra"))
+        ) {
+            VException( isolate, "Buffer type must be 'rgb', 'bgr', 'rgba' or 'bgra'." );
             return;
         }
 
-        if (str_eq(*bt, "rgb")) {
+        if (str_eq(bt, "rgb")) {
             buf_type = BUF_RGB;
-        } else if (str_eq(*bt, "bgr")) {
+        } else if (str_eq(bt, "bgr")) {
             buf_type = BUF_BGR;
-        } else if (str_eq(*bt, "rgba")) {
+        } else if (str_eq(bt, "rgba")) {
             buf_type = BUF_RGBA;
-        } else if (str_eq(*bt, "bgra")) {
+        } else if (str_eq(bt, "bgra")) {
             buf_type = BUF_BGRA;
         } else {
-            VException( isolate, "Buffer type wasn't 'rgb', 'bgr', 'rgba' or 'bgra'.");
+            VException( isolate, "Buffer type wasn't 'rgb', 'bgr', 'rgba' or 'bgra'." );
             return;
         }
+
     }
 
     try {
@@ -188,14 +207,14 @@ void FixedJpegStack::New(const Arguments &args) {
 
 }
 
-void FixedJpegStack::JpegEncodeSync(const Arguments &args) {
+void FixedJpegStack::JpegEncodeSync(const FunctionCallbackInfo<Value>& args) {
 
     FixedJpegStack *jpeg = ObjectWrap::Unwrap<FixedJpegStack>(args.This());
-    jpeg->JpegEncodeSync();
+    jpeg->JpegEncodeSync( args.GetIsolate() );
 
 }
 
-void FixedJpegStack::Push(const Arguments &args) {
+void FixedJpegStack::Push(const FunctionCallbackInfo<Value>& args) {
 
     Isolate* isolate = args.GetIsolate();
 
@@ -266,16 +285,17 @@ void FixedJpegStack::Push(const Arguments &args) {
     }
 
     if (y+h > jpeg->height) {
-        VException("Pushed fragment exceeds FixedJpegStack's height.");
+        VException(isolate, "Pushed fragment exceeds FixedJpegStack's height.");
         return;
     }
 
     jpeg->Push((unsigned char *)Buffer::Data(data_buf), x, y, w, h);
 
     Undefined( isolate );
+
 }
 
-void FixedJpegStack::SetQuality(const Arguments &args) {
+void FixedJpegStack::SetQuality(const FunctionCallbackInfo<Value>& args) {
 
     Isolate* isolate = args.GetIsolate();
 
@@ -304,6 +324,7 @@ void FixedJpegStack::SetQuality(const Arguments &args) {
     jpeg->SetQuality(q);
 
     Undefined(isolate);
+
 }
 
 void FixedJpegStack::UV_JpegEncode(uv_work_t *req) {
@@ -337,24 +358,27 @@ void FixedJpegStack::UV_JpegEncodeAfter(uv_work_t *req) {
     Handle<Value> argv[2];
 
     if (enc_req->error) {
-        argv[0] = Undefined();
-        argv[1] = ErrorException(enc_req->error);
+        //argv[0] = Undefined();
+        argv[1] = ErrorException(enc_req->isolate, enc_req->error);
     }
     else {
-        Buffer *buf = Buffer::New(enc_req->jpeg_len);
-        memcpy(Buffer::Data(buf), enc_req->jpeg, enc_req->jpeg_len);
-        argv[0] = buf->handle_;
-        argv[1] = Undefined();
+        v8::MaybeLocal<v8::Object> bufMaybe = Buffer::New(enc_req->isolate, enc_req->jpeg_len);
+        v8::Local<v8::Object> * buf;
+        bufMaybe.ToLocal<v8::Object>( buf );
+        memcpy(Buffer::Data(*buf), enc_req->jpeg, enc_req->jpeg_len);
+        argv[0] = *buf;
+        //argv[1] = Undefined();
     }
 
-    TryCatch try_catch; // don't quite see the necessity of this
+    TryCatch try_catch( enc_req->isolate ); // don't quite see the necessity of this
 
-    enc_req->callback->Call(Context::GetCurrent()->Global(), 2, argv);
+    enc_req->callback->Call( Null( enc_req->isolate ), 2, argv );
 
-    if (try_catch.HasCaught())
-        FatalException(try_catch);
+    if (try_catch.HasCaught()) {
+        FatalException( enc_req->isolate, try_catch );
+    }
 
-    enc_req->callback.Dispose();
+    //enc_req->callback.Dispose();
     free(enc_req->jpeg);
     free(enc_req->error);
 
@@ -362,7 +386,7 @@ void FixedJpegStack::UV_JpegEncodeAfter(uv_work_t *req) {
     free(enc_req);
 }
 
-void FixedJpegStack::JpegEncodeAsync(const Arguments &args) {
+void FixedJpegStack::JpegEncodeAsync(const FunctionCallbackInfo<Value>& args) {
 
     Isolate* isolate = args.GetIsolate();
 
@@ -386,7 +410,8 @@ void FixedJpegStack::JpegEncodeAsync(const Arguments &args) {
         return;
     }
 
-    enc_req->callback = Persistent<Function>::New(callback);
+    enc_req->callback = callback;
+    enc_req->isolate = isolate;
     enc_req->jpeg_obj = jpeg;
     enc_req->jpeg = NULL;
     enc_req->jpeg_len = 0;

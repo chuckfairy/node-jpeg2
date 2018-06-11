@@ -3,9 +3,19 @@
 
 #include <node.h>
 #include <node_buffer.h>
+#include <node_object_wrap.h>
+
+#include <uv.h>
 
 #include "common.h"
 #include "jpeg_encoder.h"
+
+
+using v8::Function;
+using v8::FunctionCallbackInfo;
+using v8::FunctionTemplate;
+using v8::Isolate;
+using v8::Value;
 
 class FixedJpegStack : public node::ObjectWrap {
     int width, height, quality;
@@ -18,16 +28,20 @@ class FixedJpegStack : public node::ObjectWrap {
 
 public:
     static void Initialize(v8::Handle<v8::Object> target);
+
     FixedJpegStack(int wwidth, int hheight, buffer_type bbuf_type);
-    v8::Handle<v8::Value> JpegEncodeSync();
+
+    void JpegEncodeSync( Isolate * isolate );
+
     void Push(unsigned char *data_buf, int x, int y, int w, int h);
+
     void SetQuality(int q);
 
-    static void New(const v8::Arguments &args);
-    static void JpegEncodeSync(const v8::Arguments &args);
-    static void JpegEncodeAsync(const v8::Arguments &args);
-    static void Push(const v8::Arguments &args);
-    static void SetQuality(const v8::Arguments &args);
+    static void New(const FunctionCallbackInfo<Value>& args);
+    static void JpegEncodeSync(const FunctionCallbackInfo<Value>& args);
+    static void JpegEncodeAsync(const FunctionCallbackInfo<Value>& args);
+    static void Push(const FunctionCallbackInfo<Value>& args);
+    static void SetQuality(const FunctionCallbackInfo<Value>& args);
 
 };
 
