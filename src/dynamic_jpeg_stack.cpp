@@ -15,18 +15,25 @@ using namespace node;
 void
 DynamicJpegStack::Initialize(v8::Handle<v8::Object> target)
 {
-    HandleScope scope;
+
+    Isolate* isolate = target->GetIsolate();
+
+    Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate, New);
+    tpl->SetClassName(String::NewFromUtf8(isolate, "DynamicJpegStack"));
+    tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
     Local<FunctionTemplate> t = FunctionTemplate::New(New);
     t->InstanceTemplate()->SetInternalFieldCount(1);
-    NODE_SET_PROTOTYPE_METHOD(t, "encode", JpegEncodeAsync);
-    NODE_SET_PROTOTYPE_METHOD(t, "encodeSync", JpegEncodeSync);
-    NODE_SET_PROTOTYPE_METHOD(t, "push", Push);
-    NODE_SET_PROTOTYPE_METHOD(t, "reset", Reset);
-    NODE_SET_PROTOTYPE_METHOD(t, "setBackground", SetBackground);
-    NODE_SET_PROTOTYPE_METHOD(t, "setQuality", SetQuality);
-    NODE_SET_PROTOTYPE_METHOD(t, "dimensions", Dimensions);
+    NODE_SET_PROTOTYPE_METHOD(tpl, "encode", JpegEncodeAsync);
+    NODE_SET_PROTOTYPE_METHOD(tpl, "encodeSync", JpegEncodeSync);
+    NODE_SET_PROTOTYPE_METHOD(tpl, "push", Push);
+    NODE_SET_PROTOTYPE_METHOD(tpl, "reset", Reset);
+    NODE_SET_PROTOTYPE_METHOD(tpl, "setBackground", SetBackground);
+    NODE_SET_PROTOTYPE_METHOD(tpl, "setQuality", SetQuality);
+    NODE_SET_PROTOTYPE_METHOD(tpl, "dimensions", Dimensions);
+
     target->Set(String::NewSymbol("DynamicJpegStack"), t->GetFunction());
+
 }
 
 DynamicJpegStack::DynamicJpegStack(buffer_type bbuf_type) :
@@ -39,14 +46,13 @@ DynamicJpegStack::~DynamicJpegStack()
     free(data);
 }
 
-void
-DynamicJpegStack::update_optimal_dimension(int x, int y, int w, int h)
-{
+void DynamicJpegStack::update_optimal_dimension(int x, int y, int w, int h) {
+
     if (dyn_rect.x == -1 || x < dyn_rect.x)
         dyn_rect.x = x;
     if (dyn_rect.y == -1 || y < dyn_rect.y)
         dyn_rect.y = y;
-    
+
     if (dyn_rect.w == 0)
         dyn_rect.w = w;
     if (dyn_rect.h == 0)
@@ -61,10 +67,7 @@ DynamicJpegStack::update_optimal_dimension(int x, int y, int w, int h)
         dyn_rect.h += hh;
 }
 
-Handle<Value>
-DynamicJpegStack::JpegEncodeSync()
-{
-    HandleScope scope;
+void DynamicJpegStack::JpegEncodeSync() {
 
     try {
         JpegEncoder jpeg_encoder(data, bg_width, bg_height, quality, BUF_RGB);
@@ -73,16 +76,15 @@ DynamicJpegStack::JpegEncodeSync()
         int jpeg_len = jpeg_encoder.get_jpeg_len();
         Buffer *retbuf = Buffer::New(jpeg_len);
         memcpy(Buffer::Data(retbuf), jpeg_encoder.get_jpeg(), jpeg_len);
-        return scope.Close(retbuf->handle_); 
+        //return scope.Close(retbuf->handle_);
     }
     catch (const char *err) {
         return VException(err);
     }
 }
 
-void
-DynamicJpegStack::Push(unsigned char *data_buf, int x, int y, int w, int h)
-{
+void DynamicJpegStack::Push(unsigned char *data_buf, int x, int y, int w, int h) {
+
     update_optimal_dimension(x, y, w, h);
 
     int start = y*bg_width*3 + x*3;
@@ -140,9 +142,8 @@ DynamicJpegStack::Push(unsigned char *data_buf, int x, int y, int w, int h)
     }
 }
 
-void
-DynamicJpegStack::SetBackground(unsigned char *data_buf, int w, int h)
-{
+void DynamicJpegStack::SetBackground(unsigned char *data_buf, int w, int h) {
+
     if (data) {
         free(data);
         data = NULL;
@@ -177,22 +178,15 @@ DynamicJpegStack::SetBackground(unsigned char *data_buf, int w, int h)
     bg_height = h;
 }
 
-void
-DynamicJpegStack::SetQuality(int q)
-{
+void DynamicJpegStack::SetQuality(int q) {
     quality = q;
 }
 
-void
-DynamicJpegStack::Reset()
-{
+void DynamicJpegStack::Reset() {
     dyn_rect = Rect(-1, -1, 0, 0);
 }
 
-Handle<Value>
-DynamicJpegStack::Dimensions()
-{
-    HandleScope scope;
+v8::Handle<v8::Value> DynamicJpegStack::Dimensions() {
 
     Local<Object> dim = Object::New();
     dim->Set(String::NewSymbol("x"), Integer::New(dyn_rect.x));
@@ -200,77 +194,108 @@ DynamicJpegStack::Dimensions()
     dim->Set(String::NewSymbol("width"), Integer::New(dyn_rect.w));
     dim->Set(String::NewSymbol("height"), Integer::New(dyn_rect.h));
 
-    return scope.Close(dim);
+    //return scope.Close(dim);
 }
 
-Handle<Value>
-DynamicJpegStack::New(const Arguments &args)
-{
-    HandleScope scope;
+void DynamicJpegStack::New(const FunctionCallbackInfo<Value>& args) {
 
-    if (args.Length() > 1)
-        return VException("One argument max - buffer type.");
+    Isolate* isolate = args.GetIsolate();
+
+    if (args.Length() > 1) {
+        VException(isolate, "One argument max - buffer type.");
+        return;
+    }
 
     buffer_type buf_type = BUF_RGB;
     if (args.Length() == 1) {
-        if (!args[0]->IsString())
-            return VException("First argument must be a string. Either 'rgb', 'bgr', 'rgba' or 'bgra'.");
-
-        String::AsciiValue bt(args[0]->ToString());
-        if (!(str_eq(*bt, "rgb") || str_eq(*bt, "bgr") ||
-            str_eq(*bt, "rgba") || str_eq(*bt, "bgra")))
-        {
-            return VException("Buffer type must be 'rgb', 'bgr', 'rgba' or 'bgra'.");
+        if (!args[0]->IsString()) {
+            VException(isolate, "First argument must be a string. Either 'rgb', 'bgr', 'rgba' or 'bgra'.");
+            return;
         }
 
-        if (str_eq(*bt, "rgb"))
+        String::Utf8Value str(args[3]);
+        const char * bt = * str;
+
+        if (!(str_eq(bt, "rgb")
+            || str_eq(bt, "bgr")
+            || str_eq(bt, "rgba")
+            || str_eq(bt, "bgra"))
+        ) {
+            VException( isolate, "Buffer type must be 'rgb', 'bgr', 'rgba' or 'bgra'." );
+            return;
+        }
+
+        if (str_eq(bt, "rgb")) {
             buf_type = BUF_RGB;
-        else if (str_eq(*bt, "bgr"))
+        } else if (str_eq(bt, "bgr")) {
             buf_type = BUF_BGR;
-        else if (str_eq(*bt, "rgba"))
+        } else if (str_eq(bt, "rgba")) {
             buf_type = BUF_RGBA;
-        else if (str_eq(*bt, "bgra"))
+        } else if (str_eq(bt, "bgra")) {
             buf_type = BUF_BGRA;
-        else 
-            return VException("Buffer type wasn't 'rgb', 'bgr', 'rgba' or 'bgra'.");
+        } else {
+            VException( isolate, "Buffer type wasn't 'rgb', 'bgr', 'rgba' or 'bgra'." );
+            return;
+        }
+
     }
 
     DynamicJpegStack *jpeg = new DynamicJpegStack(buf_type);
     jpeg->Wrap(args.This());
-    return args.This();
+
+    //return
+    args.This();
+
 }
 
-Handle<Value>
-DynamicJpegStack::JpegEncodeSync(const Arguments &args)
-{
-    HandleScope scope;
+void DynamicJpegStack::JpegEncodeSync(const FunctionCallbackInfo<Value>& args) {
     DynamicJpegStack *jpeg = ObjectWrap::Unwrap<DynamicJpegStack>(args.This());
-    return scope.Close(jpeg->JpegEncodeSync());
+    //return scope.Close(jpeg->JpegEncodeSync());
 }
 
-Handle<Value>
-DynamicJpegStack::Push(const Arguments &args)
-{
-    HandleScope scope;
+void DynamicJpegStack::Push(const FunctionCallbackInfo<Value>& args) {
 
-    if (args.Length() != 5)
-        return VException("Five arguments required - buffer, x, y, width, height.");
+    Isolate* isolate = args.GetIsolate();
 
-    if (!Buffer::HasInstance(args[0]))
-        return VException("First argument must be Buffer.");
-    if (!args[1]->IsInt32())
-        return VException("Second argument must be integer x.");
-    if (!args[2]->IsInt32())
-        return VException("Third argument must be integer y.");
-    if (!args[3]->IsInt32())
-        return VException("Fourth argument must be integer w.");
-    if (!args[4]->IsInt32())
-        return VException("Fifth argument must be integer h.");
+    if (args.Length() != 5) {
+        VException(isolate, "Five arguments required - buffer, x, y, width, height.");
+        return;
+    }
+
+    if (!Buffer::HasInstance(args[0])) {
+        VException(isolate, "First argument must be Buffer.");
+        return;
+    }
+
+    if (!args[1]->IsInt32()) {
+        VException(isolate, "Second argument must be integer x.");
+        return;
+    }
+
+    if (!args[2]->IsInt32()) {
+        VException(isolate, "Third argument must be integer y.");
+        return;
+    }
+
+    if (!args[3]->IsInt32()) {
+        VException(isolate, "Fourth argument must be integer w.");
+        return;
+    }
+
+    if (!args[4]->IsInt32()) {
+        VException(isolate, "Fifth argument must be integer h.");
+        return;
+    }
 
     DynamicJpegStack *jpeg = ObjectWrap::Unwrap<DynamicJpegStack>(args.This());
 
-    if (!jpeg->data)
-        return VException("No background has been set, use setBackground or setSolidBackground to set.");
+    if (!jpeg->data) {
+        VException(
+            isolate,
+            "No background has been set, use setBackground or setSolidBackground to set."
+        );
+        return;
+    }
 
     Local<Object> data_buf = args[0]->ToObject();
     int x = args[1]->Int32Value();
@@ -278,108 +303,151 @@ DynamicJpegStack::Push(const Arguments &args)
     int w = args[3]->Int32Value();
     int h = args[4]->Int32Value();
 
-    if (x < 0)
-        return VException("Coordinate x smaller than 0.");
-    if (y < 0)
-        return VException("Coordinate y smaller than 0.");
-    if (w < 0)
-        return VException("Width smaller than 0.");
-    if (h < 0)
-        return VException("Height smaller than 0.");
-    if (x >= jpeg->bg_width) 
-        return VException("Coordinate x exceeds DynamicJpegStack's background dimensions.");
-    if (y >= jpeg->bg_height) 
-        return VException("Coordinate y exceeds DynamicJpegStack's background dimensions.");
-    if (x+w > jpeg->bg_width) 
-        return VException("Pushed fragment exceeds DynamicJpegStack's width.");
-    if (y+h > jpeg->bg_height) 
-        return VException("Pushed fragment exceeds DynamicJpegStack's height.");
+    if (x < 0) {
+        VException(isolate, "Coordinate x smaller than 0.");
+        return;
+    }
+
+    if (y < 0) {
+        VException(isolate, "Coordinate y smaller than 0.");
+        return;
+    }
+
+    if (w < 0) {
+        VException(isolate, "Width smaller than 0.");
+        return;
+    }
+
+    if (h < 0) {
+        VException(isolate, "Height smaller than 0.");
+        return;
+    }
+
+    if (x >= jpeg->bg_width) {
+        VException(isolate, "Coordinate x exceeds DynamicJpegStack's background dimensions.");
+        return;
+    }
+
+    if (y >= jpeg->bg_height) {
+        VException(isolate, "Coordinate y exceeds DynamicJpegStack's background dimensions.");
+    }
+
+    if (x+w > jpeg->bg_width) {
+        VException(isolate, "Pushed fragment exceeds DynamicJpegStack's width.");
+        return;
+    }
+
+    if (y+h > jpeg->bg_height) {
+        VException(isolate, "Pushed fragment exceeds DynamicJpegStack's height.");
+        return;
+    }
 
     jpeg->Push((unsigned char *)Buffer::Data(data_buf), x, y, w, h);
 
-    return Undefined();
+    Undefined( isolate );
 }
 
-Handle<Value>
-DynamicJpegStack::SetBackground(const Arguments &args)
-{
-    HandleScope scope;
+void DynamicJpegStack::SetBackground(const FunctionCallbackInfo<Value>& args) {
 
-    if (args.Length() != 3)
-        return VException("Four arguments required - buffer, width, height");
-    if (!Buffer::HasInstance(args[0]))
-        return VException("First argument must be Buffer.");
-    if (!args[1]->IsInt32())
-        return VException("Second argument must be integer width.");
-    if (!args[2]->IsInt32())
-        return VException("Third argument must be integer height.");
+    Isolate* isolate = args.GetIsolate();
+
+    if (args.Length() != 3) {
+        VException(isolate, "Four arguments required - buffer, width, height");
+        return;
+    }
+
+    if (!Buffer::HasInstance(args[0])) {
+        VException(isolate, "First argument must be Buffer.");
+        return;
+    }
+
+    if (!args[1]->IsInt32()) {
+        VException(isolate, "Second argument must be integer width.");
+        return;
+    }
+
+    if (!args[2]->IsInt32()) {
+        VException(isolate, "Third argument must be integer height.");
+        return;
+    }
 
     DynamicJpegStack *jpeg = ObjectWrap::Unwrap<DynamicJpegStack>(args.This());
     Local<Object> data_buf = args[0]->ToObject();
     int w = args[1]->Int32Value();
     int h = args[2]->Int32Value();
 
-    if (w < 0)
-        return VException("Coordinate x smaller than 0.");
-    if (h < 0)
-        return VException("Coordinate y smaller than 0.");
+    if (w < 0) {
+        VException(isolate, "Coordinate x smaller than 0.");
+        return;
+    }
+
+    if (h < 0) {
+        VException(isolate, "Coordinate y smaller than 0.");
+    }
 
     try {
         jpeg->SetBackground((unsigned char *)Buffer::Data(data_buf), w, h);
     }
     catch (const char *err) {
-        return VException(err);
+        VException(isolate, err);
+        return;
     }
 
-    return Undefined();
+    Undefined( isolate );
+
 }
 
-Handle<Value>
-DynamicJpegStack::Reset(const Arguments &args)
-{
-    HandleScope scope;
+void DynamicJpegStack::Reset(const FunctionCallbackInfo<Value>& args) {
+
+    Isolate* isolate = args.GetIsolate();
 
     DynamicJpegStack *jpeg = ObjectWrap::Unwrap<DynamicJpegStack>(args.This());
     jpeg->Reset();
-    return Undefined();
+
+    Undefined( isolate );
+
 }
 
-Handle<Value>
-DynamicJpegStack::Dimensions(const Arguments &args)
-{
-    HandleScope scope;
+void DynamicJpegStack::Dimensions(const FunctionCallbackInfo<Value>& args) {
 
     DynamicJpegStack *jpeg = ObjectWrap::Unwrap<DynamicJpegStack>(args.This());
-    return scope.Close(jpeg->Dimensions());
+    //return scope.Close(jpeg->Dimensions());
+
 }
 
-Handle<Value>
-DynamicJpegStack::SetQuality(const Arguments &args)
-{
-    HandleScope scope;
+void DynamicJpegStack::SetQuality(const FunctionCallbackInfo<Value>& args) {
 
-    if (args.Length() != 1)
-        return VException("One argument required - quality");
+    Isolate* isolate = args.GetIsolate();
 
-    if (!args[0]->IsInt32())
-        return VException("First argument must be integer quality");
+    if (args.Length() != 1) {
+        VException(isolate, "One argument required - quality");
+        return;
+    }
+
+    if (!args[0]->IsInt32()) {
+        VException(isolate, "First argument must be integer quality");
+        return;
+    }
 
     int q = args[0]->Int32Value();
 
-    if (q < 0) 
-        return VException("Quality must be greater or equal to 0.");
-    if (q > 100)
-        return VException("Quality must be less than or equal to 100.");
+    if (q < 0) {
+        VException(isolate, "Quality must be greater or equal to 0.");
+        return;
+    }
+    if (q > 100) {
+        VException(isolate, "Quality must be less than or equal to 100.");
+        return;
+    }
 
     DynamicJpegStack *jpeg = ObjectWrap::Unwrap<DynamicJpegStack>(args.This());
     jpeg->SetQuality(q);
 
-    return Undefined();
+    Undefined( isolate );
 }
 
-void
-DynamicJpegStack::UV_JpegEncode(uv_work_t *req)
-{
+void DynamicJpegStack::UV_JpegEncode(uv_work_t *req) {
+
     encode_request *enc_req = (encode_request *)req->data;
     DynamicJpegStack *jpeg = (DynamicJpegStack *)enc_req->jpeg_obj;
 
@@ -403,10 +471,7 @@ DynamicJpegStack::UV_JpegEncode(uv_work_t *req)
     }
 }
 
-void 
-DynamicJpegStack::UV_JpegEncodeAfter(uv_work_t *req)
-{
-    HandleScope scope;
+void DynamicJpegStack::UV_JpegEncodeAfter(uv_work_t *req) {
 
     encode_request *enc_req = (encode_request *)req->data;
     delete req;
@@ -415,26 +480,27 @@ DynamicJpegStack::UV_JpegEncodeAfter(uv_work_t *req)
     Handle<Value> argv[3];
 
     if (enc_req->error) {
-        argv[0] = Undefined();
-        argv[1] = Undefined();
-        argv[2] = ErrorException(enc_req->error);
+        argv[0] = Undefined( enc_req->isolate );
+        argv[1] = Undefined( enc_req->isolate );
+        argv[2] = ErrorException(enc_req->isolate, enc_req->error);
     }
     else {
         Buffer *buf = Buffer::New(enc_req->jpeg_len);
         memcpy(Buffer::Data(buf), enc_req->jpeg, enc_req->jpeg_len);
         argv[0] = buf->handle_;
         argv[1] = jpeg->Dimensions();
-        argv[2] = Undefined();
+        argv[2] = Undefined( enc_req->isolate );
     }
 
-    TryCatch try_catch; // don't quite see the necessity of this
+    TryCatch try_catch( enc_req->isolate ); // don't quite see the necessity of this
 
-    enc_req->callback->Call(Context::GetCurrent()->Global(), 3, argv);
+    enc_req->callback->Call( Null( enc_req->isolate ), 2, argv );
 
-    if (try_catch.HasCaught())
-        FatalException(try_catch);
+    if (try_catch.HasCaught()) {
+        FatalException( enc_req->isolate, try_catch );
+    }
 
-    enc_req->callback.Dispose();
+    //enc_req->callback.Dispose();
     free(enc_req->jpeg);
     free(enc_req->error);
 
@@ -442,16 +508,18 @@ DynamicJpegStack::UV_JpegEncodeAfter(uv_work_t *req)
     free(enc_req);
 }
 
-Handle<Value>
-DynamicJpegStack::JpegEncodeAsync(const Arguments &args)
-{
+void DynamicJpegStack::JpegEncodeAsync(const FunctionCallbackInfo<Value>& args) {
+
+    Isolate* isolate = args.GetIsolate();
 
     if (args.Length() != 1) {
-        return VException("One argument required - callback function.");
+        VException(isolate, "One argument required - callback function.");
+        return;
     }
 
     if (!args[0]->IsFunction()) {
-        return VException("First argument must be a function.");
+        VException(isolate, "First argument must be a function.");
+        return;
     }
 
     Local<Function> callback = Local<Function>::Cast(args[0]);
@@ -460,7 +528,8 @@ DynamicJpegStack::JpegEncodeAsync(const Arguments &args)
     encode_request *enc_req = (encode_request *)malloc(sizeof(*enc_req));
 
     if (!enc_req) {
-        return VException("malloc in DynamicJpegStack::JpegEncodeAsync failed.");
+        VException(isolate, "malloc in DynamicJpegStack::JpegEncodeAsync failed.");
+        return;
     }
 
     enc_req->callback = Persistent<Function>::New(callback);
@@ -475,6 +544,6 @@ DynamicJpegStack::JpegEncodeAsync(const Arguments &args)
 
     jpeg->Ref();
 
-    return Undefined();
-}
+    Undefined( isolate );
 
+}

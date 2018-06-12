@@ -1,5 +1,4 @@
-#ifndef JPEG_H
-#define JPEG_H
+#pragma once
 
 #include <node.h>
 #include <node_buffer.h>
@@ -36,6 +35,3 @@ public:
     static void SetQuality(const FunctionCallbackInfo<Value>& args);
     static void SetSmoothing(const FunctionCallbackInfo<Value>& args);
 };
-
-#endif
-

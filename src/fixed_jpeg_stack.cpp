@@ -17,7 +17,7 @@ void FixedJpegStack::Initialize(v8::Handle<v8::Object> target) {
     Isolate* isolate = target->GetIsolate();
 
     Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate, New);
-    tpl->SetClassName(String::NewFromUtf8(isolate, "Jpeg"));
+    tpl->SetClassName(String::NewFromUtf8(isolate, "FixedJpegStack"));
     tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
     NODE_SET_PROTOTYPE_METHOD(tpl, "encode", JpegEncodeAsync);
